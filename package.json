@@ -1,7 +1,7 @@
 {
   "name": "git-proxy-web",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "GPL-3.0-only",
   "scripts": {
     "build": "tailwindcss -i ./internal/web/static/input.css -o ./internal/web/static/app.css --minify"
