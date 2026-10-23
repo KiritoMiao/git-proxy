@@ -1,0 +1,16 @@
+{{define "keys"}}
+<div class="split-layout">
+<section class="panel form-panel"><div class="panel-heading"><div><h2>Add an SSH key</h2><p>Register a public key from a local SSH agent.</p></div></div>
+  <form method="post" action="/actions" class="form-stack">{{template "csrf" .}}<input type="hidden" name="action" value="key_add">
+    {{if eq .User.Role "admin"}}<label>Owner<select name="user_id" required>{{range .Users}}<option value="{{.ID}}" {{if eq .ID $.User.ID}}selected{{end}}>{{.Username}}{{if .Disabled}} (disabled){{end}}</option>{{end}}</select></label>{{else}}<input type="hidden" name="user_id" value="{{.User.ID}}">{{end}}
+    <label>Key name<input name="name" placeholder="Work laptop" required maxlength="128"><span class="field-help">A recognizable name for this device or identity.</span></label>
+    <label>Public key<textarea name="public_key" rows="6" class="mono" placeholder="ssh-ed25519 AAAAC3… you@laptop" required maxlength="16000" spellcheck="false"></textarea><span class="field-help">Paste one standard OpenSSH public key. Authorized-key options and SSH certificates are not supported.</span></label>
+    <button class="button primary" type="submit">Add SSH key <span aria-hidden="true">→</span></button>
+  </form>
+  <div class="info-note"><span aria-hidden="true">⚿</span><p>Only public keys belong here. Your private key stays with your SSH agent and signs upstream connections through agent forwarding.</p></div>
+</section>
+<section><div class="section-heading"><h2>Authorized keys <span class="count">{{len .Keys}}</span></h2><span class="muted">{{if eq .User.Role "admin"}}All workspace owners{{else}}Your identities{{end}}</span></div>
+  {{range .Keys}}<article class="panel key-card"><div class="key-card-heading"><span class="key-icon" aria-hidden="true">⚿</span><div><h3>{{.Name}}</h3><p>{{owner $ .UserID}} <span aria-hidden="true">·</span> Added {{when .CreatedAt}}</p></div></div><label class="key-fingerprint">Fingerprint<code>{{.Fingerprint}}</code></label><details><summary>View public key</summary><pre class="public-key">{{.PublicKey}}</pre></details><div class="card-actions"><form method="post" action="/actions" data-confirm="Remove this SSH key? Key-specific routes using it will also be removed.">{{template "csrf" $}}<input type="hidden" name="action" value="key_delete"><input type="hidden" name="id" value="{{.ID}}"><button class="button danger-ghost compact" type="submit">Remove key</button></form></div></article>{{else}}<div class="panel empty-state"><span class="empty-icon" aria-hidden="true">⚿</span><h3>No SSH keys yet</h3><p>Add a public key to identify your SSH connections and start routing Git traffic.</p></div>{{end}}
+</section>
+</div>
+{{end}}

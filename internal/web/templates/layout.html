@@ -1,0 +1,81 @@
+{{define "csrf"}}<input type="hidden" name="csrf" value="{{.CSRF}}">{{end}}
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{.Title}} · {{.Banner}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+{{if or (eq .Page "login") (eq .Page "setup")}}
+  {{template "auth" .}}
+{{else}}
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">↗</span><span>{{.Banner}}<small>Repository control plane</small></span></a>
+      <button class="mobile-menu button ghost" type="button" data-menu-toggle aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">☰</span></button>
+      <div class="navigation" id="navigation">
+        <p class="nav-label">WORKSPACE</p>
+        <nav>
+          <a href="/" {{if eq .Page "dashboard"}}aria-current="page"{{end}}><span aria-hidden="true">◫</span> Overview</a>
+          <a href="/mappings" {{if eq .Page "mappings"}}aria-current="page"{{end}}><span aria-hidden="true">⇄</span> Repository routes</a>
+          <a href="/keys" {{if eq .Page "keys"}}aria-current="page"{{end}}><span aria-hidden="true">⚿</span> SSH keys</a>
+        </nav>
+        {{if eq .User.Role "admin"}}
+        <p class="nav-label">ADMINISTRATION</p>
+        <nav>
+          <a href="/users" {{if eq .Page "users"}}aria-current="page"{{end}}><span aria-hidden="true">◎</span> People</a>
+          <a href="/settings" {{if eq .Page "settings"}}aria-current="page"{{end}}><span aria-hidden="true">⚙</span> Settings</a>
+        </nav>
+        {{end}}
+        <div class="sidebar-note"><span class="status-dot"></span> Agent-forwarded Git<br><small>Your repositories stay upstream.</small></div>
+        <div class="account-nav">
+          <a href="/account" {{if eq .Page "account"}}aria-current="page"{{end}}><span class="avatar" aria-hidden="true">{{slice .User.Username 0 1}}</span><span>{{.User.Username}}<small>{{.User.Role}}</small></span></a>
+          <form method="post" action="/logout">{{template "csrf" .}}<button type="submit" class="button ghost full">Sign out <span aria-hidden="true">↗</span></button></form>
+        </div>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><span>Workspace <span class="breadcrumb-divider">/</span> {{.Title}}</span><button class="button ghost theme-button" data-theme-toggle type="button" aria-label="Switch color theme">◐ <span>Theme</span></button></header>
+      <main id="main" class="main-content" tabindex="-1">
+        <div class="page-heading"><div><p class="eyebrow">{{if eq .User.Role "admin"}}ADMIN WORKSPACE{{else}}YOUR WORKSPACE{{end}}</p><h1>{{.Title}}</h1><p class="subtitle">{{if eq .Page "dashboard"}}A clear view of your Git traffic, identities, and upstream connections.{{else if eq .Page "mappings"}}Map exact Git repository paths to trusted upstream destinations.{{else if eq .Page "keys"}}The public keys that identify people and select repository routes.{{else if eq .Page "users"}}Manage access to your shared Git infrastructure.{{else if eq .Page "settings"}}Tune the workspace and its session limits.{{else}}Manage your identity and sign-in security.{{end}}</p></div><span class="badge neutral">{{if eq .User.Role "admin"}}Administrator{{else}}Member{{end}}</span></div>
+        {{if .Error}}<div class="alert error" role="alert"><strong>We couldn’t save that change.</strong><span>{{.Error}}</span></div>{{end}}
+        {{if .Notice}}<div class="alert success" role="status">{{.Notice}}</div>{{end}}
+        {{if eq .Page "dashboard"}}{{template "dashboard" .}}{{end}}
+        {{if eq .Page "mappings"}}{{template "mappings" .}}{{end}}
+        {{if eq .Page "keys"}}{{template "keys" .}}{{end}}
+        {{if eq .Page "users"}}{{template "users" .}}{{end}}
+        {{if eq .Page "settings"}}{{template "settings" .}}{{end}}
+        {{if eq .Page "account"}}{{template "account" .}}{{end}}
+        <footer class="footer"><span>{{.Banner}} · Git SSH proxy</span><span>Exact routes. Trusted hosts. Your keys.</span></footer>
+      </main>
+    </div>
+  </div>
+{{end}}
+</body></html>{{end}}
+
+{{define "auth"}}
+<div class="auth-shell">
+  <section class="auth-story">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">↗</span><span>{{.Banner}}<small>Repository control plane</small></span></a>
+    <div class="auth-story-copy"><p class="eyebrow">YOUR GIT, CONNECTED</p><h1>One front door.<br>Every repository.</h1><p>Route Git traffic with confidence. Keep your code upstream, authenticate with your own keys, and see every connection in one place.</p><div class="route-illustration" aria-label="Your SSH key connects through this proxy to your upstream repositories"><span>Your SSH key</span><i aria-hidden="true">→</i><strong>{{.Banner}}</strong><i aria-hidden="true">→</i><span>Upstream Git</span></div></div>
+    <p class="auth-footnote">Built around agent forwarding and pinned host identities.</p>
+  </section>
+  <main class="auth-main"><button class="button ghost auth-theme" data-theme-toggle type="button" aria-label="Switch color theme">◐ Theme</button><div class="auth-card">
+    <p class="eyebrow">{{if eq .Page "setup"}}FIRST-TIME SETUP{{else}}WORKSPACE ACCESS{{end}}</p>
+    <h2>{{.Title}}</h2><p class="subtitle">{{if eq .Page "setup"}}Create the first administrator. You’ll need the token from the <code>setup-token</code> file in your server’s data directory.{{else}}Sign in to manage your Git connections.{{end}}</p>
+    {{if .Error}}<div class="alert error" role="alert">{{.Error}}</div>{{end}}
+    <form method="post" action="/{{.Page}}" class="form-stack">
+      {{template "csrf" .}}
+      {{if eq .Page "setup"}}<label>Bootstrap token<input name="bootstrap_token" type="password" autocomplete="off" required maxlength="1024"><span class="field-help">Only used to create the first administrator.</span></label>{{end}}
+      <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="64" pattern="[a-zA-Z0-9_.\-]{3,64}" autofocus><span class="field-help">3–64 letters, numbers, dots, underscores, or hyphens.</span></label>
+      <label>Password<input name="password" type="password" autocomplete="{{if eq .Page "setup"}}new-password{{else}}current-password{{end}}" required {{if eq .Page "setup"}}minlength="12"{{end}} maxlength="1024">{{if eq .Page "setup"}}<span class="field-help">At least 12 bytes. Use a unique password.</span>{{end}}</label>
+      <button class="button primary full" type="submit">{{if eq .Page "setup"}}Create administrator{{else}}Sign in{{end}} <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="auth-security"><span aria-hidden="true">◈</span> Secure sessions · {{.Settings.SessionTimeoutMinutes}} minute inactivity timeout</p>
+  </div></main>
+</div>
+{{end}}

@@ -1,0 +1,36 @@
+{{define "ownerPicker"}}
+{{if eq .User.Role "admin"}}<label>Owner<select name="user_id" data-owner-picker required>{{range .Users}}<option value="{{.ID}}" {{if eq .ID $.EditMapping.UserID}}selected{{end}}>{{.Username}}{{if .Disabled}} (disabled){{end}}</option>{{end}}</select></label>{{else}}<input type="hidden" name="user_id" value="{{.User.ID}}">{{end}}
+{{end}}
+{{define "mappings"}}
+<div class="split-layout">
+  <section class="panel form-panel" id="route-form"><div class="panel-heading"><div><h2>{{if .Editing}}Edit repository route{{else}}New repository route{{end}}</h2><p>A source path, an identity, and a trusted upstream.</p></div>{{if .Editing}}<a class="text-link" href="/mappings">Cancel edit</a>{{end}}</div>
+    <form method="post" action="/actions" class="form-stack" data-route-form>
+      {{template "csrf" .}}<input type="hidden" name="action" value="mapping_save"><input type="hidden" name="id" value="{{.EditMapping.ID}}">
+      {{template "ownerPicker" .}}
+      <label>Source repository path<input name="source" value="{{.EditMapping.Source}}" placeholder="team/project.git" required maxlength="1024" spellcheck="false"><span class="field-help">Exact path clients request. No leading slash; <code>.git</code> is significant.</span></label>
+      <label>SSH key<select name="key_id" data-key-picker><option value="">All owner keys</option>{{range .Keys}}<option value="{{.ID}}" data-owner="{{.UserID}}" {{if eq .ID $.EditMapping.KeyID}}selected{{end}}>{{.Name}} · {{owner $ .UserID}}</option>{{end}}</select><span class="field-help">A route for one key overrides an all-keys route for the same source.</span></label>
+      <fieldset><legend>Upstream destination</legend><div class="form-grid host-grid"><label>Host<input name="host" value="{{.EditMapping.Host}}" placeholder="github.com" required maxlength="253" autocapitalize="none" spellcheck="false"></label><label>Port<input name="port" type="number" value="{{.EditMapping.Port}}" min="1" max="65535" required></label></div><div class="form-grid"><label>SSH user<input name="remote_user" value="{{.EditMapping.RemoteUser}}" placeholder="git" required maxlength="64" spellcheck="false"></label><label>Repository path<input name="remote_path" value="{{.EditMapping.RemotePath}}" placeholder="org/project.git" required maxlength="1024" spellcheck="false"></label></div>
+        <label>Trusted host fingerprint<input class="mono" name="host_fingerprint" value="{{.EditMapping.HostFingerprint}}" placeholder="SHA256:…" required maxlength="128" spellcheck="false"><span class="field-help">Paste a trusted SHA256 fingerprint, or fetch the host identity below and verify it before saving.</span></label>
+        <button class="button secondary" type="button" data-discover-host>Fetch host identity</button>
+        <p class="field-help" data-host-status role="status" aria-live="polite"></p>
+        <div class="info-note" data-host-identity hidden><div>
+          <strong>Presented SSH host identity</strong>
+          <p class="mono fingerprint" data-host-address></p>
+          <p class="mono fingerprint" data-host-algorithm></p>
+          <p class="mono fingerprint" data-host-fingerprint></p>
+          <details><summary>View public host key</summary><p class="mono fingerprint" data-host-public-key></p></details>
+          <p data-host-comparison></p>
+          <p>This key was received from the network. Compare it with your provider’s published identity or a trusted administrator before using it.</p>
+          <button class="button secondary compact" type="button" data-use-host-identity>Use this fingerprint</button>
+        </div></div>
+      </fieldset>
+      <label class="check-label"><input type="checkbox" name="read_only" {{if .EditMapping.ReadOnly}}checked{{end}}><span>Read-only access<small>Allow fetch and archive; block pushes.</small></span></label>
+      <button class="button primary" type="submit">{{if .Editing}}Save route changes{{else}}Create route{{end}} <span aria-hidden="true">→</span></button>
+    </form>
+  </section>
+  <section class="route-list"><div class="section-heading"><h2>Configured routes <span class="count">{{len .Mappings}}</span></h2><span class="muted">{{if eq .User.Role "admin"}}All workspace owners{{else}}Your routes{{end}}</span></div>
+    {{range .Mappings}}<article class="panel route-card"><div class="route-card-heading"><div><p class="eyebrow">{{owner $ .UserID}}</p><h3 class="mono">{{.Source}}</h3></div><span class="badge {{if .ReadOnly}}neutral{{else}}good{{end}}">{{if .ReadOnly}}Read only{{else}}Read & write{{end}}</span></div><div class="route-destination"><span aria-hidden="true">↳</span><div><strong class="mono">{{.RemoteUser}}@{{.Host}}:{{.Port}}</strong><small class="mono">{{.RemotePath}}</small></div></div><dl class="route-details"><div><dt>Key scope</dt><dd>{{keyName $ .KeyID}}</dd></div><div><dt>Host identity</dt><dd class="mono fingerprint">{{.HostFingerprint}}</dd></div></dl><div class="card-actions"><a class="button secondary compact" href="/mappings?edit={{.ID}}#route-form">Edit route</a><form method="post" action="/actions" data-confirm="Remove this repository route? Clients will no longer be able to use it.">{{template "csrf" $}}<input type="hidden" name="action" value="mapping_delete"><input type="hidden" name="id" value="{{.ID}}"><button class="button danger-ghost compact" type="submit">Remove</button></form></div></article>{{else}}<div class="panel empty-state"><span class="empty-icon" aria-hidden="true">↗</span><h3>Your next connection starts here</h3><p>Create a route to connect an exact repository path to an upstream Git server.</p></div>{{end}}
+    <div class="info-note"><span aria-hidden="true">◈</span><p>The proxy streams Git traffic directly. It does not store repositories or run a local shell.</p></div>
+  </section>
+</div>
+{{end}}
