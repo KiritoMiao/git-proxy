@@ -68,7 +68,7 @@ func (s *server) hostIdentity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Enter a valid upstream port.", http.StatusBadRequest)
 		return
 	}
-	host := r.PostForm.Get("host")
+	host := store.UpstreamHost(r.PostForm.Get("host"))
 	if err = store.ValidateDestination(host, port); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

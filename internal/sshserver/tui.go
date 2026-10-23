@@ -8,6 +8,7 @@ import (
 
 	ssh "github.com/gliderlabs/ssh"
 	"github.com/kirito/git-proxy/internal/store"
+	"github.com/kirito/git-proxy/internal/version"
 	"golang.org/x/term"
 )
 
@@ -40,6 +41,7 @@ func (s *Server) tui(sess ssh.Session, user store.User) {
 		}
 	}()
 	fmt.Fprintf(t, "\r\n%s — %s (%s)\r\nRestricted management console. Type help for commands.\r\n", terminalText(s.db.GetSettings().Banner), terminalText(user.Username), user.Role)
+	fmt.Fprintf(t, "Source: %s\r\n", version.Repository)
 	for {
 		line, err := t.ReadLine()
 		if err != nil {
@@ -296,7 +298,7 @@ func (s *Server) tuiCommand(t *term.Terminal, u store.User, cmd string) error {
 	return nil
 }
 func (s *Server) editMapping(t *term.Terminal, u store.User, edit bool) error {
-	m := store.Mapping{UserID: u.ID, Port: 22, RemoteUser: "git"}
+	m := store.Mapping{UserID: u.ID, Host: "github.com", Port: 22, RemoteUser: "git"}
 	if edit {
 		ms, e := s.db.Mappings(u.ID)
 		if e != nil {
@@ -337,7 +339,7 @@ func (s *Server) editMapping(t *term.Terminal, u store.User, edit bool) error {
 		key = ""
 	}
 	m.KeyID = key
-	ask("Source repository (exact path, e.g. team/repo.git)", &m.Source)
+	ask("Source repository (.git added if omitted)", &m.Source)
 	ask("Upstream hostname/IP", &m.Host)
 	port := strconv.Itoa(m.Port)
 	ask("Upstream port", &port)

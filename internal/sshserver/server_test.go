@@ -211,6 +211,7 @@ func TestGitStreamingEndToEnd(t *testing.T) {
 	git(work, true, "push", url, "main")
 	git(clone, true, "pull", "--ff-only")
 	git(work, true, "ls-remote", url)
+	git(work, true, "ls-remote", strings.TrimSuffix(url, ".git"))
 	// Archive bytes are written separately from SSH warning stderr.
 	c := exec.Command("git", "archive", "--remote="+url, "HEAD", "hello.txt")
 	c.Env = append(os.Environ(), "SSH_AUTH_SOCK="+sock, "GIT_SSH_COMMAND="+sshCmd)

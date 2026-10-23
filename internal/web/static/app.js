@@ -47,6 +47,13 @@
 
     const host = routeForm.querySelector('[name=host]');
     const port = routeForm.querySelector('[name=port]');
+    const upstreamHost = () => host.value.trim() || 'github.com';
+    for (const name of ['source', 'remote_path']) {
+      const input = routeForm.elements.namedItem(name);
+      input.addEventListener('blur', () => {
+        if (input.value && !input.value.endsWith('.git')) input.value += '.git';
+      });
+    }
     const fingerprint = routeForm.querySelector('[name=host_fingerprint]');
     const discover = routeForm.querySelector('[data-discover-host]');
     const status = routeForm.querySelector('[data-host-status]');
@@ -74,7 +81,7 @@
       try {
         const response = await fetch('/api/host-identity', {
           method: 'POST', credentials: 'same-origin', signal: controller.signal,
-          body: new URLSearchParams({host: host.value, port: port.value, csrf: routeForm.querySelector('[name=csrf]').value})
+          body: new URLSearchParams({host: upstreamHost(), port: port.value, csrf: routeForm.querySelector('[name=csrf]').value})
         });
         if (!response.ok) throw new Error((await response.text()).trim());
         const result = await response.json();
@@ -94,7 +101,7 @@
       }
     });
     useIdentity.addEventListener('click', () => {
-      if (!identity || identity.host !== host.value || identity.port !== Number(port.value)) return;
+      if (!identity || identity.host !== upstreamHost() || identity.port !== Number(port.value)) return;
       fingerprint.value = identity.fingerprint;
       fingerprint.dispatchEvent(new Event('input', {bubbles: true}));
       status.textContent = 'Fingerprint selected. Save the route to apply it.';

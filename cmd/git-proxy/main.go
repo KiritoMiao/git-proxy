@@ -22,6 +22,7 @@ import (
 	"github.com/kirito/git-proxy/internal/activity"
 	"github.com/kirito/git-proxy/internal/sshserver"
 	"github.com/kirito/git-proxy/internal/store"
+	"github.com/kirito/git-proxy/internal/version"
 	"github.com/kirito/git-proxy/internal/web"
 	"golang.org/x/crypto/ssh"
 )
@@ -38,7 +39,16 @@ func run() error {
 	secure := flag.Bool("secure-cookie", false, "require HTTPS for session cookies")
 	cert := flag.String("tls-cert", "", "optional HTTPS certificate PEM")
 	key := flag.String("tls-key", "", "optional HTTPS private key PEM")
+	showVersion := flag.Bool("version", false, "print version and source revision")
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Git Proxy %s\nSource: %s\n\nUsage: git-proxy [options]\n", version.Number(), version.Repository)
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+	if *showVersion {
+		fmt.Printf("git-proxy %s (%s)\n%s\n", version.Number(), version.Revision, version.Repository)
+		return nil
+	}
 	if (*cert == "") != (*key == "") {
 		return errors.New("tls-cert and tls-key must be provided together")
 	}

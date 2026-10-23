@@ -1,0 +1,19 @@
+services:
+  git-proxy:
+    image: ghcr.io/kiritomiao/git-proxy:latest
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "${SSH_BIND_ADDRESS:-0.0.0.0}:${SSH_PORT:-2222}:2222"
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    volumes:
+      - proxy-data:/data
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+
+volumes:
+  proxy-data:

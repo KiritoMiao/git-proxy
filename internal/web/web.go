@@ -294,6 +294,10 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.render(w, d, http.StatusOK)
 		return
 	}
+	if r.URL.Path == "/docs" && r.Method == http.MethodGet {
+		s.render(w, s.data(user, sess, "docs"), http.StatusOK)
+		return
+	}
 	if user.ID == "" {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.Error(w, "Authentication required.", http.StatusUnauthorized)
@@ -385,10 +389,10 @@ func methodNotAllowed(w http.ResponseWriter) {
 }
 
 func (s *server) data(user store.User, sess session, page string) pageData {
-	titles := map[string]string{"dashboard": "Overview", "mappings": "Repository routes", "keys": "SSH keys", "users": "People", "settings": "Settings", "account": "Your account", "login": "Welcome back", "setup": "Create your control plane"}
+	titles := map[string]string{"dashboard": "Overview", "mappings": "Repository routes", "keys": "SSH keys", "users": "People", "settings": "Settings", "account": "Your account", "login": "Welcome back", "setup": "Create your control plane", "docs": "Connection documentation"}
 	settings := s.db.GetSettings()
 	return pageData{Page: page, Title: titles[page], CSRF: sess.CSRF, User: user, Banner: settings.Banner, Settings: settings,
-		Owners: make(map[string]string), KeyNames: make(map[string]string), EditMapping: store.Mapping{UserID: user.ID, Port: 22, RemoteUser: "git"}}
+		Owners: make(map[string]string), KeyNames: make(map[string]string), EditMapping: store.Mapping{UserID: user.ID, Host: "github.com", Port: 22, RemoteUser: "git"}}
 }
 
 func (s *server) load(d *pageData) error {

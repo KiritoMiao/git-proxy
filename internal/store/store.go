@@ -153,6 +153,14 @@ INSERT OR IGNORE INTO settings(id,banner,max_sessions_per_user,session_timeout_m
 	if err == nil {
 		_, err = tx.Exec(schema)
 		if err == nil {
+			// Canonicalize existing routes atomically. Conflicting aliases fail the
+			// transaction rather than silently choosing a different destination.
+			_, err = tx.Exec(`UPDATE mappings SET
+			 source=CASE WHEN substr(source,-4)='.git' THEN source ELSE source||'.git' END,
+			 remote_path=CASE WHEN substr(remote_path,-4)='.git' THEN remote_path ELSE remote_path||'.git' END
+			 WHERE substr(source,-4)!='.git' OR substr(remote_path,-4)!='.git'`)
+		}
+		if err == nil {
 			err = tx.Commit()
 		} else {
 			_ = tx.Rollback()
@@ -679,7 +687,7 @@ func (s *Store) AuthenticateKey(pub ssh.PublicKey) (User, Key, error) {
 	return u, k, nil
 }
 
-// ValidateSource accepts an exact repository name, including any .git suffix.
+// ValidateSource accepts a repository name with or without a .git suffix.
 // Canonical segments prevent path traversal and shell metacharacters.
 func ValidateSource(source string) error {
 	if source == "" || strings.HasPrefix(source, "/") || !pathPattern.MatchString(source) {
@@ -691,6 +699,23 @@ func ValidateSource(source string) error {
 		}
 	}
 	return nil
+}
+
+// RepositoryPath appends the conventional Git suffix after path validation.
+func RepositoryPath(path string) string {
+	if strings.HasSuffix(path, ".git") {
+		return path
+	}
+	return path + ".git"
+}
+
+// UpstreamHost supplies the default when no hostname was entered.
+func UpstreamHost(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return "github.com"
+	}
+	return host
 }
 
 // ValidateDestination checks the upstream address used by routes and identity discovery.
@@ -721,6 +746,9 @@ func validateMapping(m *Mapping) error {
 	if !remoteUserPattern.MatchString(m.RemoteUser) {
 		return errors.New("remote user must contain only letters, digits, dots, underscores or hyphens")
 	}
+	m.Source = RepositoryPath(m.Source)
+	m.RemotePath = RepositoryPath(m.RemotePath)
+	m.Host = UpstreamHost(m.Host)
 	if err := ValidateDestination(m.Host, m.Port); err != nil {
 		return err
 	}
@@ -865,6 +893,7 @@ func (s *Store) Resolve(userID, keyID, source string) (Mapping, error) {
 	if err := ValidateSource(source); err != nil {
 		return Mapping{}, err
 	}
+	source = RepositoryPath(source)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Mapping{}, databaseError(err)

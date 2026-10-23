@@ -23,6 +23,43 @@ For remote web access use HTTPS, either directly:
 
 or a TLS reverse proxy forwarding the original `Host`, with the application bound to loopback and `-secure-cookie`. That flag also selects HTTPS for form-origin validation behind the reverse proxy. Do not expose unencrypted web password login publicly.
 
+## Docker Compose
+
+Pull and start the published image with Docker and the Compose plugin. The supplied `compose.yaml` uses `ghcr.io/kiritomiao/git-proxy:latest`:
+
+```sh
+docker compose up -d
+docker compose logs -f git-proxy
+```
+
+Open `http://127.0.0.1:8080` and read the first-admin setup token:
+
+```sh
+docker compose exec git-proxy cat /data/setup-token
+```
+
+The token file exists only until initial setup completes. A named volume persists the database, SSH host key, and setup token across container replacements. `docker compose down` preserves it; `docker compose down -v` deletes all stored accounts, routes, and server identity.
+
+The image builds Tailwind assets and a static Go binary in separate build stages. The runtime runs as UID/GID `10001:10001`; Compose uses a read-only root filesystem and a writable `/data` volume. Git and Node are not required in the runtime image. For an existing bind-mounted data directory, grant UID/GID `10001:10001` ownership before mounting it at `/data`.
+
+SSH is published on all host interfaces at port 2222. The web interface is published on loopback at port 8080. If the native server is already using those ports, stop it before starting Compose. Alternatively, override the published ports without changing the container listeners:
+
+```sh
+SSH_PORT=2223 WEB_PORT=8081 docker compose up -d
+```
+
+`SSH_BIND_ADDRESS` and `WEB_BIND_ADDRESS` also override host binding addresses. For an HTTPS reverse proxy, preserve the request `Host` and override the service command to include `-secure-cookie` along with the existing listener flags. Do not publish unencrypted web login to the public internet.
+
+Run the latest image directly:
+
+```sh
+docker run -d --name git-proxy --restart unless-stopped --pull always \
+  -p 2222:2222 -p 127.0.0.1:8080:8080 \
+  -v git-proxy-data:/data ghcr.io/kiritomiao/git-proxy:latest
+```
+
+To upgrade, run `docker compose pull && docker compose up -d`. For reproducible deployments, replace `latest` with a release version such as `1.0.0` or an image digest. Build a local development image with `docker build -t git-proxy:local .`.
+
 ## Register users, keys, and routes
 
 1. In **People**, an administrator creates member or administrator accounts. There is no public signup after initial setup. Administrators see and manage every user, key, route, and activity entry; members manage their own keys, routes, and password.
@@ -37,7 +74,7 @@ For example, an owner can configure:
 | Key A | `xxxx/tools.git` | `git@host-b:2222` | `other/tools.git` |
 | Key B | `xxxx/project.git` | `git@host-c:22` | `/srv/git/project.git` |
 
-A specific-key route takes precedence over an all-owner-keys route for the same source. The SSH username at the proxy does not select an account: the registered key selects its owner. Paths are case-sensitive; `.git` is significant. A single leading slash added by Git's `ssh://` syntax is removed from the virtual source. Paths contain letters, digits, `.`, `_`, `-`, and `/`, with no empty, `.` or `..` components. Upstream paths may have one leading slash; spaces, tildes, and shell syntax are intentionally unsupported.
+A specific-key route takes precedence over an all-owner-keys route for the same source. The SSH username at the proxy does not select an account: the registered key selects its owner. Paths are case-sensitive. A missing `.git` suffix is added to source and upstream repository paths; clients can request either `team/repo` or `team/repo.git`. A blank upstream hostname defaults to `github.com`, including for host identity discovery. A single leading slash added by Git's `ssh://` syntax is removed from the virtual source. Paths contain letters, digits, `.`, `_`, `-`, and `/`, with no empty, `.` or `..` components. Upstream paths may have one leading slash; spaces, tildes, and shell syntax are intentionally unsupported. Existing route paths are normalized on startup; conflicting suffix aliases cause startup to fail instead of choosing a destination silently.
 
 To configure or replace a host identity from the control panel, open **Repository routes → Edit route**, check the upstream **Host** and **Port**, then click **Fetch host identity**. The panel displays the SSH key algorithm, public key, SHA256 fingerprint, and whether it matches the current field. Compare the result with a trusted source, click **Use this fingerprint**, then **Save route changes**. Fetching does not alter the route or authenticate upstream; selecting fills the field, and saving applies the pin. Changing the host or port clears the fetched result so an identity cannot be selected for a different destination.
 
@@ -56,6 +93,8 @@ Load the upstream credentials into your local SSH agent and register the proxy i
 ```sh
 ssh-add ~/.ssh/id_ed25519
 ```
+
+The control panel’s **Documentation** page at `/docs#forward-agent` includes this setup. `ForwardAgent yes` replaces the need to pass `ssh -A` for Git connections using the matching host entry. The management terminal does not require forwarding.
 
 Add a client SSH configuration entry:
 
@@ -120,6 +159,16 @@ go build ./cmd/git-proxy
 ```
 
 The Go integration test starts a controlled upstream SSH fixture and runs real Git push, clone, pull, `ls-remote`, and remote archive through a forwarded agent. It checks unknown-key denial, command restrictions, missing-agent denial, SFTP/port-forward denial, host-key mismatch, read-only routes, streamed activity, and a real terminal session. Store tests cover account isolation, key-specific precedence, revocation, concurrent bootstrap, concurrent last-administrator changes, password revisions, persistence, and validation. Web tests cover authentication and authorization boundaries.
+
+## Versioning and releases
+
+[Release Please](https://github.com/googleapis/release-please) manages Semantic Versions through release pull requests. The canonical version is `internal/version/version.txt`, embedded in the Go binary. Release PRs update that file, the version manifest, both npm metadata files, and `CHANGELOG.md` together. Run `git-proxy -version` or `docker run --rm ghcr.io/kiritomiao/git-proxy:latest -version` to inspect an installed build.
+
+Use Conventional Commits on `main`: `fix:` increments the patch, `feat:` increments the minor, and a breaking-change `!` or `BREAKING CHANGE:` increments the major. Merge the generated release PR to create its `vX.Y.Z` tag and GitHub release. The same workflow then calls the publisher directly, so publication works with the built-in `GITHUB_TOKEN` without needing a personal access token. Enable **Allow GitHub Actions to create and approve pull requests** in repository Settings → Actions → General.
+
+Each stable release runs tests, uploads Linux/macOS archives for AMD64 and ARM64 with SHA256 checksums to GitHub Releases, and publishes a multi-platform Linux image to GHCR. Image tags include `X.Y.Z`, `X.Y`, `X`, and `latest`. OCI labels record the version, source revision, repository, and GPL license. GHCR contains container images; downloadable standalone binaries are attached to the corresponding GitHub release.
+
+The **Publish release artifacts** workflow can be run manually with an existing stable release tag to recover a failed publication. Set the GHCR package visibility to **Public** after its first publication to allow anonymous pulls. No registry credentials are required in Compose for a public package.
 
 ## License
 

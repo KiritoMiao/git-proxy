@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check managed versions
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const version = fs.readFileSync('internal/version/version.txt', 'utf8').trim();
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const manifest = JSON.parse(fs.readFileSync('.release-please-manifest.json', 'utf8'));
+          assert.match(version, /^\d+\.\d+\.\d+$/);
+          for (const actual of [pkg.version, lock.version, lock.packages[''].version, manifest['.']]) assert.equal(actual, version);
+          JS
+      - name: Build assets and check Go
+        run: |
+          npm ci
+          npm run build
+          go test -race -timeout 120s ./...
+          go vet ./...
+      - name: Check container configuration
+        run: docker compose config --quiet
+      - name: Build container
+        run: docker build --build-arg VERSION="$(cat internal/version/version.txt)" --build-arg REVISION="$GITHUB_SHA" -t git-proxy:ci .
+      - name: Smoke container binary
+        run: docker run --rm git-proxy:ci -version

@@ -3,6 +3,7 @@ package store_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -108,9 +109,7 @@ func TestKeyScopedPrecedenceAndRevocation(t *testing.T) {
 			t.Fatalf("key %s resolved %s, want %s", tc.key, got.ID, tc.want)
 		}
 	}
-	_, err := db.Resolve(owner.ID, keyA.ID, "team/repo")
-	expectError(t, err, store.ErrNotFound)
-	_, err = db.Resolve(owner.ID, "", "team/repo.git")
+	_, err := db.Resolve(owner.ID, "", "team/repo.git")
 	expectError(t, err, store.ErrNotFound)
 	_, err = db.SaveMapping(owner.ID, mapping(owner.ID, "", "team/repo.git"))
 	expectError(t, err, store.ErrConflict)
@@ -455,7 +454,7 @@ func TestValidationAndNormalization(t *testing.T) {
 		mutate func(*store.Mapping)
 	}{
 		{"shell-host", func(m *store.Mapping) { m.Host = "host;id" }},
-		{"host-space", func(m *store.Mapping) { m.Host = "example.com " }},
+		{"host-space", func(m *store.Mapping) { m.Host = "example .com" }},
 		{"host-option", func(m *store.Mapping) { m.Host = "-oProxyCommand" }},
 		{"host-port", func(m *store.Mapping) { m.Host = "host:22" }},
 		{"bad-label", func(m *store.Mapping) { m.Host = "bad_.example" }},
@@ -537,5 +536,61 @@ func TestKeyDisplayName(t *testing.T) {
 		if _, err := db.AddKey(u.ID, u.ID, name, text); err == nil {
 			t.Errorf("accepted invalid label %q", name)
 		}
+	}
+}
+
+func TestRepositorySuffixAndDefaultHost(t *testing.T) {
+	db, _ := openStore(t)
+	u := bootstrap(t, db)
+	key, _ := addKey(t, db, u, "laptop")
+	input := mapping(u.ID, key.ID, "team/repo")
+	input.RemotePath = "/srv/git/repo"
+	input.Host = ""
+	m := saveMapping(t, db, u.ID, input)
+	if m.Source != "team/repo.git" || m.RemotePath != "/srv/git/repo.git" || m.Host != "github.com" {
+		t.Fatalf("route defaults: %+v", m)
+	}
+	for _, path := range []string{"team/repo", "team/repo.git"} {
+		got, err := db.Resolve(u.ID, key.ID, path)
+		if err != nil || got.ID != m.ID {
+			t.Fatalf("resolve %q: %+v %v", path, got, err)
+		}
+	}
+	input.Source = "team/repo.git"
+	if _, err := db.SaveMapping(u.ID, input); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("suffix alias must not create a second route: %v", err)
+	}
+	m = saveMapping(t, db, u.ID, m)
+	if m.Source != "team/repo.git" || m.RemotePath != "/srv/git/repo.git" {
+		t.Fatalf("suffix duplicated: %+v", m)
+	}
+}
+
+func TestExistingRepositorySuffixMigration(t *testing.T) {
+	db, path := openStore(t)
+	u := bootstrap(t, db)
+	key, _ := addKey(t, db, u, "laptop")
+	m := saveMapping(t, db, u.ID, mapping(u.ID, key.ID, "team/repo.git"))
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = legacy.Exec("UPDATE mappings SET source=?,remote_path=? WHERE id=?", "team/repo", "/srv/git/repository", m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.Resolve(u.ID, key.ID, "team/repo")
+	if err != nil || got.ID != m.ID || got.Source != "team/repo.git" || got.RemotePath != "/srv/git/repository.git" {
+		t.Fatalf("legacy route: %+v %v", got, err)
 	}
 }

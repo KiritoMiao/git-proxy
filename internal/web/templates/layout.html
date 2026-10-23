@@ -11,6 +11,8 @@
 <body>
 {{if or (eq .Page "login") (eq .Page "setup")}}
   {{template "auth" .}}
+{{else if eq .Page "docs"}}
+  {{template "documentation" .}}
 {{else}}
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="app-shell">
@@ -23,6 +25,7 @@
           <a href="/" {{if eq .Page "dashboard"}}aria-current="page"{{end}}><span aria-hidden="true">◫</span> Overview</a>
           <a href="/mappings" {{if eq .Page "mappings"}}aria-current="page"{{end}}><span aria-hidden="true">⇄</span> Repository routes</a>
           <a href="/keys" {{if eq .Page "keys"}}aria-current="page"{{end}}><span aria-hidden="true">⚿</span> SSH keys</a>
+          <a href="/docs"><span aria-hidden="true">?</span> Documentation</a>
         </nav>
         {{if eq .User.Role "admin"}}
         <p class="nav-label">ADMINISTRATION</p>
@@ -50,7 +53,7 @@
         {{if eq .Page "users"}}{{template "users" .}}{{end}}
         {{if eq .Page "settings"}}{{template "settings" .}}{{end}}
         {{if eq .Page "account"}}{{template "account" .}}{{end}}
-        <footer class="footer"><span>{{.Banner}} · Git SSH proxy</span><span>Exact routes. Trusted hosts. Your keys.</span></footer>
+        <footer class="footer"><span>{{.Banner}} · Git SSH proxy</span><a class="text-link" href="https://github.com/KiritoMiao/git-proxy" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a></footer>
       </main>
     </div>
   </div>
@@ -62,7 +65,7 @@
   <section class="auth-story">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">↗</span><span>{{.Banner}}<small>Repository control plane</small></span></a>
     <div class="auth-story-copy"><p class="eyebrow">YOUR GIT, CONNECTED</p><h1>One front door.<br>Every repository.</h1><p>Route Git traffic with confidence. Keep your code upstream, authenticate with your own keys, and see every connection in one place.</p><div class="route-illustration" aria-label="Your SSH key connects through this proxy to your upstream repositories"><span>Your SSH key</span><i aria-hidden="true">→</i><strong>{{.Banner}}</strong><i aria-hidden="true">→</i><span>Upstream Git</span></div></div>
-    <p class="auth-footnote">Built around agent forwarding and pinned host identities.</p>
+    <p class="auth-footnote">Built around agent forwarding and pinned host identities. <a class="text-link" href="https://github.com/KiritoMiao/git-proxy" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a></p>
   </section>
   <main class="auth-main"><button class="button ghost auth-theme" data-theme-toggle type="button" aria-label="Switch color theme">◐ Theme</button><div class="auth-card">
     <p class="eyebrow">{{if eq .Page "setup"}}FIRST-TIME SETUP{{else}}WORKSPACE ACCESS{{end}}</p>

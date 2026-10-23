@@ -1,0 +1,45 @@
+{{define "documentation"}}
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="topbar"><a class="text-link" href="/">← {{.Banner}}</a><button class="button ghost theme-button" data-theme-toggle type="button" aria-label="Switch color theme">◐ Theme</button></header>
+<main id="main" class="main-content" tabindex="-1">
+  <div class="page-heading"><div><p class="eyebrow">DOCUMENTATION</p><h1>Connect with your SSH agent</h1><p class="subtitle">Configure agent forwarding once, then use your usual Git commands.</p></div></div>
+  <div class="dashboard-bottom">
+    <section class="panel connection-guide" id="forward-agent">
+      <h2>Enable ForwardAgent</h2>
+      <p>Add this entry to <code>~/.ssh/config</code>. Replace the host, port, and identity file with your proxy settings.</p>
+      <div class="code-block"><pre>Host git-proxy
+    HostName <span data-proxy-host>your-proxy-host</span>
+    Port 2222
+    User git
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    ForwardAgent yes</pre></div>
+      <p><code>ForwardAgent yes</code> enables forwarding for this host alias, so you do not need <code>ssh -A</code> in each Git command. Use <code>git-proxy</code> in the commands below to match this entry.</p>
+      <h3>Load your upstream key</h3>
+      <div class="code-block"><code>ssh-add ~/.ssh/id_ed25519</code></div>
+      <p>The public key selected by <code>IdentityFile</code> must be registered in this workspace. Your agent must hold a key accepted by the upstream Git server; this may be a different key.</p>
+      <h3>Clone your mapped repository</h3>
+      <div class="code-block"><code>git clone git-proxy:team/project.git</code></div>
+      <p>Replace <code>team/project.git</code> with your route’s source path. The <code>.git</code> suffix is optional; the proxy adds it when omitted. When creating a route, a blank upstream host defaults to <code>github.com</code>. Fetch, pull, and push use the same SSH configuration.</p>
+      <h3>Open the management terminal</h3>
+      <div class="code-block"><code>ssh -t git-proxy</code></div>
+      <p>The management terminal does not require agent forwarding.</p>
+    </section>
+    <section class="panel connection-guide">
+      <h2>Why Git needs agent forwarding</h2>
+      <p>Your registered key authenticates the connection to this proxy. The proxy then opens a separate SSH connection to the upstream Git server. Agent forwarding lets your local agent sign that second authentication request without transferring your private key.</p>
+      <h3>Use forwarding for one command</h3>
+      <p>If you prefer not to edit your SSH configuration, enable forwarding for a single clone:</p>
+      <div class="code-block"><code>git -c core.sshCommand='ssh -A' clone ssh://git@<span data-proxy-host>your-proxy-host</span>:2222/team/project.git</code></div>
+      <p>For an existing checkout, use <code>git -c core.sshCommand='ssh -A' fetch</code> or enable <code>ForwardAgent yes</code> for the host used by its remote URL.</p>
+      <h3>Check your setup</h3>
+      <div class="code-block"><pre>ssh-add -l
+ssh -G git-proxy</pre></div>
+      <p><code>ssh-add -l</code> lists loaded agent keys. In <code>ssh -G git-proxy</code>, check <code>hostname</code>, <code>port</code>, and <code>forwardagent yes</code>.</p>
+      <div class="info-note"><p>Enable forwarding only for a proxy you trust. The proxy can request signatures from your agent while connected. Keep <code>ForwardAgent yes</code> scoped to this host rather than a wildcard.</p></div>
+      <a class="text-link" href="/">Return to workspace →</a>
+    </section>
+  </div>
+  <footer class="footer"><span>{{.Banner}} · Git SSH proxy</span><a class="text-link" href="https://github.com/KiritoMiao/git-proxy" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a></footer>
+</main>
+{{end}}
