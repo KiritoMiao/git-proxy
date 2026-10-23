@@ -120,3 +120,7 @@ go build ./cmd/git-proxy
 ```
 
 The Go integration test starts a controlled upstream SSH fixture and runs real Git push, clone, pull, `ls-remote`, and remote archive through a forwarded agent. It checks unknown-key denial, command restrictions, missing-agent denial, SFTP/port-forward denial, host-key mismatch, read-only routes, streamed activity, and a real terminal session. Store tests cover account isolation, key-specific precedence, revocation, concurrent bootstrap, concurrent last-administrator changes, password revisions, persistence, and validation. Web tests cover authentication and authorization boundaries.
+
+## License
+
+Licensed under the GNU General Public License, version 3 only (`GPL-3.0-only`). See [LICENSE](LICENSE) for the full terms.
