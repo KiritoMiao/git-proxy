@@ -148,6 +148,12 @@ CREATE TABLE IF NOT EXISTS settings (
  session_timeout_minutes INTEGER NOT NULL CHECK(session_timeout_minutes>0)
 );
 INSERT OR IGNORE INTO settings(id,banner,max_sessions_per_user,session_timeout_minutes) VALUES(1,'Git Proxy',8,120);
+CREATE TABLE IF NOT EXISTS default_destination (
+ id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ host TEXT NOT NULL, port INTEGER NOT NULL CHECK(port BETWEEN 1 AND 65535),
+ remote_user TEXT NOT NULL, host_fingerprint TEXT NOT NULL,
+ read_only INTEGER NOT NULL CHECK(read_only IN (0,1))
+);
 `
 	tx, err := db.Begin()
 	if err == nil {
@@ -743,14 +749,21 @@ func validateMapping(m *Mapping) error {
 	if err := ValidateSource(strings.TrimPrefix(m.RemotePath, "/")); err != nil {
 		return fmt.Errorf("remote path: %w", err)
 	}
+	m.Source = RepositoryPath(m.Source)
+	m.RemotePath = RepositoryPath(m.RemotePath)
+	return validateMappingDestination(m, true)
+}
+
+func validateMappingDestination(m *Mapping, requireFingerprint bool) error {
 	if !remoteUserPattern.MatchString(m.RemoteUser) {
 		return errors.New("remote user must contain only letters, digits, dots, underscores or hyphens")
 	}
-	m.Source = RepositoryPath(m.Source)
-	m.RemotePath = RepositoryPath(m.RemotePath)
 	m.Host = UpstreamHost(m.Host)
 	if err := ValidateDestination(m.Host, m.Port); err != nil {
 		return err
+	}
+	if m.HostFingerprint == "" && !requireFingerprint {
+		return nil
 	}
 	if !strings.HasPrefix(m.HostFingerprint, "SHA256:") {
 		return errors.New("host fingerprint must be a SHA256 SSH fingerprint")
@@ -909,7 +922,22 @@ func (s *Store) Resolve(userID, keyID, source string) (Mapping, error) {
 	if !belongs {
 		return Mapping{}, ErrNotFound
 	}
-	return scanMapping(tx.QueryRow("SELECT "+mappingColumns+" FROM mappings WHERE user_id=? AND source=? AND (key_id=? OR key_id IS NULL) ORDER BY (key_id IS NOT NULL) DESC LIMIT 1", userID, source, keyID))
+	m, err := scanMapping(tx.QueryRow("SELECT "+mappingColumns+" FROM mappings WHERE user_id=? AND source=? AND (key_id=? OR key_id IS NULL) ORDER BY (key_id IS NOT NULL) DESC LIMIT 1", userID, source, keyID))
+	if !errors.Is(err, ErrNotFound) {
+		return m, err
+	}
+	d, err := defaultDestination(tx)
+	if err != nil {
+		return Mapping{}, err
+	}
+	if !d.Enabled {
+		return Mapping{}, ErrNotFound
+	}
+	return Mapping{
+		UserID: userID, KeyID: keyID, Source: source, RemotePath: source,
+		Host: d.Host, Port: d.Port, RemoteUser: d.RemoteUser,
+		HostFingerprint: d.HostFingerprint, ReadOnly: d.ReadOnly,
+	}, nil
 }
 
 func (s *Store) GetSettings() Settings {

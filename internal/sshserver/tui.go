@@ -102,7 +102,7 @@ func (s *Server) tuiCommand(t *term.Terminal, u store.User, cmd string) error {
 	case "help":
 		fmt.Fprintln(t, "Commands (no shell or code execution):\n  mappings       list repository routes\n  mapping add    create a route\n  mapping edit   edit a route by ID\n  mapping delete delete a route by ID\n  keys           list registered keys\n  key add        register a public key\n  key delete     remove a key\n  activity       recent Git streams\n  password       change your password\n  quit           disconnect")
 		if u.Role == "admin" {
-			fmt.Fprintln(t, "Admin: users, user add, user edit, user delete, user password, settings, settings edit")
+			fmt.Fprintln(t, "Admin: users, user add, user edit, user delete, user password, settings, settings edit, default destination, default destination edit")
 		}
 	case "mappings":
 		ms, e := s.db.Mappings(u.ID)
@@ -262,6 +262,8 @@ func (s *Server) tuiCommand(t *term.Terminal, u store.User, cmd string) error {
 			return e
 		}
 		return s.db.SetPassword(u.ID, id, p)
+	case "default destination", "default destination edit":
+		return s.defaultDestination(t, u, cmd == "default destination edit")
 	case "settings", "settings edit":
 		if _, e := s.db.Users(u.ID); e != nil {
 			return e
@@ -364,4 +366,53 @@ func (s *Server) editMapping(t *term.Terminal, u store.User, edit bool) error {
 		fmt.Fprintln(t, "Saved mapping", m.ID)
 	}
 	return e
+}
+
+func (s *Server) defaultDestination(t *term.Terminal, u store.User, edit bool) error {
+	d, err := s.db.GetDefaultDestination(u.ID)
+	if err != nil {
+		return err
+	}
+	if !edit {
+		fmt.Fprintf(t, "Catch-all enabled: %t\nDestination: %s@%s:%d\nHost key: %s\nRead-only: %t\nUnmapped repositories retain their requested path.\n", d.Enabled, d.RemoteUser, d.Host, d.Port, d.HostFingerprint, d.ReadOnly)
+		return nil
+	}
+	enabled, err := prompt(t, "Enable default destination (true/false)", strconv.FormatBool(d.Enabled))
+	if err != nil {
+		return err
+	}
+	d.Enabled, err = strconv.ParseBool(enabled)
+	if err != nil {
+		return err
+	}
+	if d.Enabled {
+		ask := func(label string, value *string) {
+			if err == nil {
+				*value, err = prompt(t, label, *value)
+			}
+		}
+		ask("Upstream hostname/IP", &d.Host)
+		port := strconv.Itoa(d.Port)
+		ask("Upstream port", &port)
+		ask("Upstream SSH user", &d.RemoteUser)
+		ask("Trusted host SHA256 fingerprint", &d.HostFingerprint)
+		readOnly := strconv.FormatBool(d.ReadOnly)
+		ask("Read-only (true/false)", &readOnly)
+		if err != nil {
+			return err
+		}
+		d.Port, err = strconv.Atoi(port)
+		if err != nil {
+			return err
+		}
+		d.ReadOnly, err = strconv.ParseBool(readOnly)
+		if err != nil {
+			return err
+		}
+	}
+	if err = s.db.SaveDefaultDestination(u.ID, d); err != nil {
+		return err
+	}
+	fmt.Fprintln(t, "Default destination saved.")
+	return nil
 }

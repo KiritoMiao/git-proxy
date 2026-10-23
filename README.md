@@ -76,6 +76,10 @@ For example, an owner can configure:
 
 A specific-key route takes precedence over an all-owner-keys route for the same source. The SSH username at the proxy does not select an account: the registered key selects its owner. Paths are case-sensitive. A missing `.git` suffix is added to source and upstream repository paths; clients can request either `team/repo` or `team/repo.git`. A blank upstream hostname defaults to `github.com`, including for host identity discovery. A single leading slash added by Git's `ssh://` syntax is removed from the virtual source. Paths contain letters, digits, `.`, `_`, `-`, and `/`, with no empty, `.` or `..` components. Upstream paths may have one leading slash; spaces, tildes, and shell syntax are intentionally unsupported. Existing route paths are normalized on startup; conflicting suffix aliases cause startup to fail instead of choosing a destination silently.
 
+Administrators can enable a global catch-all under **Settings → Default destination**. Configure its host, port, SSH user, trusted host fingerprint, and optional read-only policy, then save. It is disabled by default. Only administrators can view or change this configuration; members continue managing their own explicit routes.
+
+Routing precedence is key-specific route, user-wide route, then enabled default destination. With a default of `git@github.com:22`, a registered user's request for `anthropics/claudecode` without an explicit route goes to `git@github.com:anthropics/claudecode.git`. The default preserves the normalized requested path; there is no repository prefix or rewrite. Explicit routes retain their own destination and read-only policy, and their connection or authentication failures never trigger the catch-all. Unknown/revoked keys and disabled users remain denied. Upstream authorization still uses the client's forwarded agent.
+
 To configure or replace a host identity from the control panel, open **Repository routes → Edit route**, check the upstream **Host** and **Port**, then click **Fetch host identity**. The panel displays the SSH key algorithm, public key, SHA256 fingerprint, and whether it matches the current field. Compare the result with a trusted source, click **Use this fingerprint**, then **Save route changes**. Fetching does not alter the route or authenticate upstream; selecting fills the field, and saving applies the pin. Changing the host or port clears the fetched result so an identity cannot be selected for a different destination.
 
 Obtain the upstream host fingerprint through a trusted administrator or the hosting provider's published fingerprints. For a host you control, inspect its public host key directly:
@@ -137,7 +141,7 @@ keys             key add         key delete       activity
 password         quit
 ```
 
-Administrators also get `users`, `user add`, `user edit`, `user delete`, `user password`, `settings`, and `settings edit`. Commands prompt for fields; list commands print IDs used by edit/delete prompts. Password input is hidden. Agent forwarding is required for Git, not for management. No SFTP, SCP, arbitrary exec, TCP forwarding, or subsystem access is exposed. The server never starts a local process for production sessions.
+Administrators also get `users`, `user add`, `user edit`, `user delete`, `user password`, `settings`, `settings edit`, `default destination`, and `default destination edit`. The last two commands show and configure the global catch-all destination; disabling it makes unmatched repository paths fail again. Commands prompt for fields; list commands print IDs used by edit/delete prompts. Password input is hidden. Agent forwarding is required for Git, not for management. No SFTP, SCP, arbitrary exec, TCP forwarding, or subsystem access is exposed. The server never starts a local process for production sessions.
 
 ## Reconfiguration and access
 

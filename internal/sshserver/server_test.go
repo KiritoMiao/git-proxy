@@ -123,11 +123,13 @@ func TestGitStreamingEndToEnd(t *testing.T) {
 		return bytes.Equal(k.Marshal(), signer.PublicKey().Marshal())
 	}, Handler: func(sess ssh.Session) {
 		args := sess.Command()
-		if len(args) != 2 || args[1] != bare || (args[0] != "git-upload-pack" && args[0] != "git-receive-pack" && args[0] != "git-upload-archive") {
+		if len(args) != 2 || (args[1] != bare && args[1] != "fallback/repo.git") || (args[0] != "git-upload-pack" && args[0] != "git-receive-pack" && args[0] != "git-upload-archive") {
 			sess.Exit(1)
 			return
 		}
-		c := exec.Command(args[0], args[1])
+		// A relative catch-all path is served from the fixture repository. The
+		// argument check above proves the proxy preserved the requested path.
+		c := exec.Command(args[0], bare)
 		c.Stdout = sess
 		c.Stderr = sess.Stderr()
 		for _, v := range sess.Environ() {
@@ -219,12 +221,46 @@ func TestGitStreamingEndToEnd(t *testing.T) {
 	if e != nil || !bytes.Contains(archive, []byte("second revision")) {
 		t.Fatalf("archive failed: %v", e)
 	}
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{Enabled: true, Host: m.Host, Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: m.HostFingerprint}); e != nil {
+		t.Fatal(e)
+	}
+	fallbackURL := fmt.Sprintf("ssh://git@127.0.0.1:%d/fallback/repo", port)
+	fallbackRefs := git(work, true, "ls-remote", fallbackURL)
+	if !bytes.Contains(fallbackRefs, []byte("refs/heads/main")) {
+		t.Fatalf("fallback refs: %s", fallbackRefs)
+	}
+	// The catch-all is read-only, but the explicit route remains writable.
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{Enabled: true, Host: m.Host, Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: m.HostFingerprint, ReadOnly: true}); e != nil {
+		t.Fatal(e)
+	}
+	git(work, true, "push", url, "main")
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{Enabled: true, Host: m.Host, Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: m.HostFingerprint}); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.WriteFile(filepath.Join(work, "hello.txt"), []byte("catch-all revision\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	run(work, "commit", "-am", "catch-all")
+	git(work, true, "push", fallbackURL, "main")
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{Enabled: true, Host: m.Host, Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: m.HostFingerprint, ReadOnly: true}); e != nil {
+		t.Fatal(e)
+	}
+	if b := git(work, false, "push", fallbackURL, "main"); !bytes.Contains(b, []byte("read-only")) {
+		t.Fatalf("fallback read-only: %s", b)
+	}
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{}); e != nil {
+		t.Fatal(e)
+	}
+	git(work, false, "ls-remote", fallbackURL)
 	m.ReadOnly = true
 	if m, e = db.SaveMapping(u.ID, m); e != nil {
 		t.Fatal(e)
 	}
 	if b := git(work, false, "push", url, "main"); !bytes.Contains(b, []byte("read-only")) {
 		t.Fatalf("read-only rejection: %s", b)
+	}
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{Enabled: true, Host: m.Host, Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: m.HostFingerprint}); e != nil {
+		t.Fatal(e)
 	}
 	m.HostFingerprint = gossh.FingerprintSHA256(proxySigner.PublicKey())
 	if _, e = db.SaveMapping(u.ID, m); e != nil {
@@ -233,6 +269,18 @@ func TestGitStreamingEndToEnd(t *testing.T) {
 	if b := git(work, false, "ls-remote", url); !bytes.Contains(b, []byte("host key")) {
 		t.Fatalf("pin rejection: %s", b)
 	}
+	badDefault := store.DefaultDestination{Enabled: true, Host: m.Host, Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: m.HostFingerprint}
+	if e = db.SaveDefaultDestination(u.ID, badDefault); e != nil {
+		t.Fatal(e)
+	}
+	if b := git(work, false, "ls-remote", fallbackURL); !bytes.Contains(b, []byte("host key")) {
+		t.Fatalf("catch-all pin rejection: %s", b)
+	}
+	// Changing the admin destination affects the next unmapped request.
+	if e = db.SaveDefaultDestination(u.ID, store.DefaultDestination{Enabled: true, Host: "127.0.0.1", Port: m.Port, RemoteUser: m.RemoteUser, HostFingerprint: gossh.FingerprintSHA256(upstreamSigner.PublicKey())}); e != nil {
+		t.Fatal(e)
+	}
+	git(work, true, "ls-remote", fallbackURL)
 	// Unknown keys never complete authentication; registered keys cannot execute a shell.
 	unknown, _ := testSigner(t)
 	if c, e := gossh.Dial("tcp", pl.Addr().String(), &gossh.ClientConfig{User: "git", Auth: []gossh.AuthMethod{gossh.PublicKeys(unknown)}, HostKeyCallback: gossh.InsecureIgnoreHostKey()}); e == nil {
@@ -315,5 +363,14 @@ func TestGitStreamingEndToEnd(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no completed streamed push: %+v", events)
+	}
+	fallbackPush := false
+	for _, v := range events {
+		if v.Source == "fallback/repo.git" && v.Operation == "git-receive-pack" && v.Status == "completed" && strings.HasSuffix(v.Destination, "/fallback/repo.git") {
+			fallbackPush = true
+		}
+	}
+	if !fallbackPush {
+		t.Fatalf("missing catch-all push activity: %+v", events)
 	}
 }

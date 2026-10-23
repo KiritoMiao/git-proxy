@@ -51,6 +51,8 @@ type pageData struct {
 	Mappings                                 []store.Mapping
 	Events                                   []activity.Event
 	Settings                                 store.Settings
+	DefaultDestination                       store.DefaultDestination
+	DefaultDestinationPort                   string
 	EditMapping                              store.Mapping
 	Editing                                  bool
 	Active                                   int
@@ -408,6 +410,13 @@ func (s *server) load(d *pageData) error {
 	for _, u := range d.Users {
 		d.Owners[u.ID] = u.Username
 	}
+	if d.Page == "settings" && d.User.Role == "admin" {
+		d.DefaultDestination, err = s.db.GetDefaultDestination(d.User.ID)
+		if err != nil {
+			return err
+		}
+		d.DefaultDestinationPort = strconv.Itoa(d.DefaultDestination.Port)
+	}
 	if d.Page == "dashboard" || d.Page == "keys" || d.Page == "mappings" {
 		d.Keys, err = s.db.Keys(d.User.ID)
 		if err != nil {
@@ -449,6 +458,7 @@ func (s *server) render(w http.ResponseWriter, d pageData, status int) {
 func (s *server) action(w http.ResponseWriter, r *http.Request, user store.User, sess session) {
 	f := r.PostForm
 	var err error
+	var defaultDestination store.DefaultDestination
 	page, notice := "dashboard", "Changes saved."
 	switch f.Get("action") {
 	case "key_add":
@@ -527,6 +537,21 @@ func (s *server) action(w http.ResponseWriter, r *http.Request, user store.User,
 			}
 		}
 		notice = "Password updated and all sessions for this user signed out."
+	case "default_destination":
+		page = "settings"
+		if user.Role != "admin" {
+			http.Error(w, "Administrator access required.", http.StatusForbidden)
+			return
+		}
+		defaultDestination = store.DefaultDestination{Enabled: f.Get("enabled") == "on", Host: f.Get("host"), RemoteUser: f.Get("remote_user"), HostFingerprint: f.Get("host_fingerprint"), ReadOnly: f.Get("read_only") == "on"}
+		port, parseErr := strconv.Atoi(f.Get("port"))
+		if parseErr != nil {
+			err = fmt.Errorf("Enter a valid upstream port.")
+			break
+		}
+		defaultDestination.Port = port
+		err = s.db.SaveDefaultDestination(user.ID, defaultDestination)
+		notice = "Default destination saved."
 	case "settings":
 		page = "settings"
 		max, e1 := strconv.Atoi(f.Get("max_sessions"))
@@ -555,6 +580,10 @@ func (s *server) action(w http.ResponseWriter, r *http.Request, user store.User,
 			port, _ := strconv.Atoi(f.Get("port"))
 			d.EditMapping = store.Mapping{ID: f.Get("id"), UserID: f.Get("user_id"), KeyID: f.Get("key_id"), Source: f.Get("source"), Host: f.Get("host"), Port: port, RemoteUser: f.Get("remote_user"), RemotePath: f.Get("remote_path"), HostFingerprint: f.Get("host_fingerprint"), ReadOnly: f.Get("read_only") == "on"}
 			d.Editing = f.Get("id") != ""
+		}
+		if f.Get("action") == "default_destination" {
+			d.DefaultDestination = defaultDestination
+			d.DefaultDestinationPort = f.Get("port")
 		}
 		s.render(w, d, http.StatusBadRequest)
 		return

@@ -4,25 +4,14 @@
 {{define "mappings"}}
 <div class="split-layout">
   <section class="panel form-panel" id="route-form"><div class="panel-heading"><div><h2>{{if .Editing}}Edit repository route{{else}}New repository route{{end}}</h2><p>A source path, an identity, and a trusted upstream.</p></div>{{if .Editing}}<a class="text-link" href="/mappings">Cancel edit</a>{{end}}</div>
-    <form method="post" action="/actions" class="form-stack" data-route-form>
+    <form method="post" action="/actions" class="form-stack" data-route-form data-host-form>
       {{template "csrf" .}}<input type="hidden" name="action" value="mapping_save"><input type="hidden" name="id" value="{{.EditMapping.ID}}">
       {{template "ownerPicker" .}}
       <label>Source repository path<input name="source" value="{{.EditMapping.Source}}" placeholder="team/project.git" required maxlength="1024" spellcheck="false"><span class="field-help">No leading slash. We add <code>.git</code> if you leave it off; clients can use either form.</span></label>
       <label>SSH key<select name="key_id" data-key-picker><option value="">All owner keys</option>{{range .Keys}}<option value="{{.ID}}" data-owner="{{.UserID}}" {{if eq .ID $.EditMapping.KeyID}}selected{{end}}>{{.Name}} · {{owner $ .UserID}}</option>{{end}}</select><span class="field-help">A route for one key overrides an all-keys route for the same source.</span></label>
       <fieldset><legend>Upstream destination</legend><div class="form-grid host-grid"><label>Host<input name="host" value="{{.EditMapping.Host}}" placeholder="github.com" maxlength="253" autocapitalize="none" spellcheck="false"><span class="field-help">Defaults to <code>github.com</code> when blank.</span></label><label>Port<input name="port" type="number" value="{{.EditMapping.Port}}" min="1" max="65535" required></label></div><div class="form-grid"><label>SSH user<input name="remote_user" value="{{.EditMapping.RemoteUser}}" placeholder="git" required maxlength="64" spellcheck="false"></label><label>Repository path<input name="remote_path" value="{{.EditMapping.RemotePath}}" placeholder="org/project.git" required maxlength="1024" spellcheck="false"><span class="field-help">We add <code>.git</code> if you leave it off.</span></label></div>
         <label>Trusted host fingerprint<input class="mono" name="host_fingerprint" value="{{.EditMapping.HostFingerprint}}" placeholder="SHA256:…" required maxlength="128" spellcheck="false"><span class="field-help">Paste a trusted SHA256 fingerprint, or fetch the host identity below and verify it before saving.</span></label>
-        <button class="button secondary" type="button" data-discover-host>Fetch host identity</button>
-        <p class="field-help" data-host-status role="status" aria-live="polite"></p>
-        <div class="info-note" data-host-identity hidden><div>
-          <strong>Presented SSH host identity</strong>
-          <p class="mono fingerprint" data-host-address></p>
-          <p class="mono fingerprint" data-host-algorithm></p>
-          <p class="mono fingerprint" data-host-fingerprint></p>
-          <details><summary>View public host key</summary><p class="mono fingerprint" data-host-public-key></p></details>
-          <p data-host-comparison></p>
-          <p>This key was received from the network. Compare it with your provider’s published identity or a trusted administrator before using it.</p>
-          <button class="button secondary compact" type="button" data-use-host-identity>Use this fingerprint</button>
-        </div></div>
+        {{template "hostIdentity" .}}
       </fieldset>
       <label class="check-label"><input type="checkbox" name="read_only" {{if .EditMapping.ReadOnly}}checked{{end}}><span>Read-only access<small>Allow fetch and archive; block pushes.</small></span></label>
       <button class="button primary" type="submit">{{if .Editing}}Save route changes{{else}}Create route{{end}} <span aria-hidden="true">→</span></button>
@@ -33,4 +22,19 @@
     <div class="info-note"><span aria-hidden="true">◈</span><p>The proxy streams Git traffic directly. It does not store repositories or run a local shell.</p></div>
   </section>
 </div>
+{{end}}
+
+{{define "hostIdentity"}}
+<button class="button secondary" type="button" data-discover-host>Fetch host identity</button>
+<p class="field-help" data-host-status role="status" aria-live="polite"></p>
+<div class="info-note" data-host-identity hidden><div>
+  <strong>Presented SSH host identity</strong>
+  <p class="mono fingerprint" data-host-address></p>
+  <p class="mono fingerprint" data-host-algorithm></p>
+  <p class="mono fingerprint" data-host-fingerprint></p>
+  <details><summary>View public host key</summary><p class="mono fingerprint" data-host-public-key></p></details>
+  <p data-host-comparison></p>
+  <p>This key was received from the network. Compare it with your provider’s published identity or a trusted administrator before using it.</p>
+  <button class="button secondary compact" type="button" data-use-host-identity>Use this fingerprint</button>
+</div></div>
 {{end}}

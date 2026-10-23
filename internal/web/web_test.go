@@ -171,3 +171,126 @@ func TestSecureProxyOriginUsesConfiguredHTTPS(t *testing.T) {
 		t.Fatal("secure deployment accepted HTTP origin")
 	}
 }
+
+func TestDefaultDestinationRequiresAdministrator(t *testing.T) {
+	db, s, admin := testWeb(t, true)
+	member, err := db.CreateUser(admin.ID, "member", "member-password-1234", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, sess := testSession(s, member)
+	r := httptest.NewRequest(http.MethodGet, "http://proxy.test/settings", nil)
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "default_destination") {
+		t.Fatalf("member settings: %d %s", w.Code, w.Body.String())
+	}
+	form := url.Values{"csrf": {sess.CSRF}, "action": {"default_destination"}, "enabled": {"on"}, "host": {"git.example.com"}, "port": {"2222"}, "remote_user": {"deploy"}, "host_fingerprint": {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, "read_only": {"on"}}
+	for _, port := range []string{"2222", "invalid"} {
+		form.Set("port", port)
+		w = webPost(s, cookie, "/actions", "http://proxy.test", form)
+		if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "default_destination") {
+			t.Fatalf("member mutation with port %q: %d %s", port, w.Code, w.Body.String())
+		}
+	}
+	destination, err := db.GetDefaultDestination(admin.ID)
+	if err != nil || destination.Enabled || destination.Host != "github.com" || destination.Port != 22 || destination.RemoteUser != "git" {
+		t.Fatalf("rejected mutation changed default: %+v, %v", destination, err)
+	}
+	d := s.data(member, sess, "mappings")
+	if err := s.load(&d); err != nil {
+		t.Fatal(err)
+	}
+	if d.DefaultDestination != (store.DefaultDestination{}) {
+		t.Fatalf("member page loaded global destination: %+v", d.DefaultDestination)
+	}
+}
+
+func TestAdministratorDefaultDestinationPersistenceAndDisable(t *testing.T) {
+	db, s, admin := testWeb(t, true)
+	cookie, sess := testSession(s, admin)
+	r := httptest.NewRequest(http.MethodGet, "http://proxy.test/settings", nil)
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("administrator settings: %d %s", w.Code, w.Body.String())
+	}
+	for _, field := range []string{`name="action" value="default_destination"`, `name="host" value="github.com"`, `name="port" type="number" value="22"`, `name="remote_user" value="git"`, "data-host-form", "data-discover-host"} {
+		if !strings.Contains(w.Body.String(), field) {
+			t.Errorf("settings missing %q", field)
+		}
+	}
+	originalSettings := db.GetSettings()
+	form := url.Values{"csrf": {sess.CSRF}, "action": {"default_destination"}, "enabled": {"on"}, "host": {"git.example.com"}, "port": {"2222"}, "remote_user": {"deploy"}, "host_fingerprint": {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, "read_only": {"on"}}
+	w = webPost(s, cookie, "/actions", "http://proxy.test", form)
+	if w.Code != http.StatusSeeOther || !strings.HasPrefix(w.Header().Get("Location"), "/settings?notice=") {
+		t.Fatalf("save default: %d %s", w.Code, w.Body.String())
+	}
+	want := store.DefaultDestination{Enabled: true, Host: "git.example.com", Port: 2222, RemoteUser: "deploy", HostFingerprint: form.Get("host_fingerprint"), ReadOnly: true}
+	destination, err := db.GetDefaultDestination(admin.ID)
+	if err != nil || destination != want {
+		t.Fatalf("saved default: %+v, %v; want %+v", destination, err, want)
+	}
+	d := s.data(admin, sess, "settings")
+	if err := s.load(&d); err != nil {
+		t.Fatal(err)
+	}
+	if d.DefaultDestination != want {
+		t.Fatalf("settings loaded %+v; want %+v", d.DefaultDestination, want)
+	}
+	r = httptest.NewRequest(http.MethodGet, "http://proxy.test/settings", nil)
+	r.AddCookie(cookie)
+	w = httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `name="host_fingerprint" value="`+want.HostFingerprint+`"`) {
+		t.Fatalf("saved fingerprint not displayed: %d %s", w.Code, w.Body.String())
+	}
+	form.Del("enabled")
+	form.Del("host_fingerprint")
+	form.Del("read_only")
+	w = webPost(s, cookie, "/actions", "http://proxy.test", form)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("disable without fingerprint: %d %s", w.Code, w.Body.String())
+	}
+	want.Enabled, want.ReadOnly, want.HostFingerprint = false, false, ""
+	destination, err = db.GetDefaultDestination(admin.ID)
+	if err != nil || destination != want {
+		t.Fatalf("disabled default: %+v, %v; want %+v", destination, err, want)
+	}
+	form.Set("host", "")
+	w = webPost(s, cookie, "/actions", "http://proxy.test", form)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("save blank default host: %d %s", w.Code, w.Body.String())
+	}
+	destination, err = db.GetDefaultDestination(admin.ID)
+	if err != nil || destination.Host != "github.com" {
+		t.Fatalf("blank host default: %+v, %v", destination, err)
+	}
+	if settings := db.GetSettings(); settings != originalSettings {
+		t.Fatalf("default action changed workspace settings: %+v", settings)
+	}
+}
+
+func TestDefaultDestinationValidationPreservesInput(t *testing.T) {
+	db, s, admin := testWeb(t, true)
+	cookie, sess := testSession(s, admin)
+	form := url.Values{"csrf": {sess.CSRF}, "action": {"default_destination"}, "enabled": {"on"}, "host": {"git.example.com"}, "remote_user": {"deploy"}, "host_fingerprint": {""}, "read_only": {"on"}}
+	for _, port := range []string{"2222", "invalid"} {
+		form.Set("port", port)
+		w := webPost(s, cookie, "/actions", "http://proxy.test", form)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("invalid destination with port %q: %d %s", port, w.Code, w.Body.String())
+		}
+		for _, field := range []string{`name="enabled" checked`, `name="host" value="git.example.com"`, `name="port" type="number" value="` + port + `"`, `name="remote_user" value="deploy"`, `name="host_fingerprint" value=""`, `name="read_only" checked`} {
+			if !strings.Contains(w.Body.String(), field) {
+				t.Errorf("failed input with port %q missing %q", port, field)
+			}
+		}
+	}
+	destination, err := db.GetDefaultDestination(admin.ID)
+	if err != nil || destination.Enabled || destination.Host != "github.com" {
+		t.Fatalf("invalid destination was persisted: %+v, %v", destination, err)
+	}
+}

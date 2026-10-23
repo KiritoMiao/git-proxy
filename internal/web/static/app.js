@@ -45,20 +45,29 @@
     owner?.addEventListener("change", filterKeys);
     filterKeys();
 
-    const host = routeForm.querySelector('[name=host]');
-    const port = routeForm.querySelector('[name=port]');
-    const upstreamHost = () => host.value.trim() || 'github.com';
     for (const name of ['source', 'remote_path']) {
       const input = routeForm.elements.namedItem(name);
       input.addEventListener('blur', () => {
         if (input.value && !input.value.endsWith('.git')) input.value += '.git';
       });
     }
-    const fingerprint = routeForm.querySelector('[name=host_fingerprint]');
-    const discover = routeForm.querySelector('[data-discover-host]');
-    const status = routeForm.querySelector('[data-host-status]');
-    const panel = routeForm.querySelector('[data-host-identity]');
-    const useIdentity = routeForm.querySelector('[data-use-host-identity]');
+  }
+
+  document.querySelectorAll('[data-host-form]').forEach(form => {
+    const host = form.querySelector('[name=host]');
+    const port = form.querySelector('[name=port]');
+    const upstreamHost = () => host.value.trim() || 'github.com';
+    const fingerprint = form.querySelector('[name=host_fingerprint]');
+    const discover = form.querySelector('[data-discover-host]');
+    const status = form.querySelector('[data-host-status]');
+    const panel = form.querySelector('[data-host-identity]');
+    const useIdentity = form.querySelector('[data-use-host-identity]');
+    const enabled = form.querySelector('[name=enabled]');
+    if (enabled) {
+      const requireFingerprint = () => { fingerprint.required = enabled.checked; };
+      enabled.addEventListener('change', requireFingerprint);
+      requireFingerprint();
+    }
     let identity;
     let request;
     const clearIdentity = () => {
@@ -81,7 +90,7 @@
       try {
         const response = await fetch('/api/host-identity', {
           method: 'POST', credentials: 'same-origin', signal: controller.signal,
-          body: new URLSearchParams({host: upstreamHost(), port: port.value, csrf: routeForm.querySelector('[name=csrf]').value})
+          body: new URLSearchParams({host: upstreamHost(), port: port.value, csrf: form.querySelector('[name=csrf]').value})
         });
         if (!response.ok) throw new Error((await response.text()).trim());
         const result = await response.json();
@@ -104,10 +113,10 @@
       if (!identity || identity.host !== upstreamHost() || identity.port !== Number(port.value)) return;
       fingerprint.value = identity.fingerprint;
       fingerprint.dispatchEvent(new Event('input', {bubbles: true}));
-      status.textContent = 'Fingerprint selected. Save the route to apply it.';
+      status.textContent = 'Fingerprint selected. Save the form to apply it.';
       fingerprint.focus();
     });
-  }
+  });
 
   document.querySelectorAll("[data-proxy-host]").forEach(node => {
     // Brackets keep IPv6 examples usable in SSH URLs.

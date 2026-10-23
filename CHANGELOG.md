@@ -13,6 +13,8 @@ Release Please maintains this file from Conventional Commits.
 
 ## Unreleased
 
+- Add an admin-managed default destination for registered keys requesting unmapped repository paths, with same-path forwarding, host pinning, and optional read-only access.
+
 - Stream Git SSH operations through forwarded agents with key-scoped routing.
 - Manage users, keys, routes, and upstream host identities through the web interface and restricted SSH terminal.
 - Add GPL v3 licensing, container deployment, optional `.git` suffixes, and GitHub host defaults.
