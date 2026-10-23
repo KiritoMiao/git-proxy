@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0](https://github.com/KiritoMiao/git-proxy/compare/v1.0.0...v1.1.0) (2026-10-23)
+
+
+### Features
+
+* add managed releases, GHCR images, and container deployment ([149b9c1](https://github.com/KiritoMiao/git-proxy/commit/149b9c1e10efb6196544510a37332bec8108b9d3))
+
+## Changelog
+
 Release Please maintains this file from Conventional Commits.
 
 ## Unreleased
