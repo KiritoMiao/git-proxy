@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/KiritoMiao/git-proxy/compare/v1.1.0...v1.2.0) (2026-10-23)
+
+
+### Features
+
+* add admin-managed catch-all SSH destination ([d9c53ae](https://github.com/KiritoMiao/git-proxy/commit/d9c53ae22f98459bd1a0a6e4bd26414d8a620853))
+
 ## [1.1.0](https://github.com/KiritoMiao/git-proxy/compare/v1.0.0...v1.1.0) (2026-10-23)
 
 
